@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Web Chat & Admin Panel</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            wa: {
+              green: '#00a884',
+              teal: '#128c7e',
+              darkGreen: '#075e54',
+              lightBg: '#f0f2f5',
+              darkBg: '#111b21',
+              darkPanel: '#202c33',
+              darkHeader: '#202c33',
+              lightHeader: '#f0f2f5',
+              outgoingDark: '#005c4b',
+              outgoingLight: '#d9fdd3',
+              incomingDark: '#202c33',
+              incomingLight: '#ffffff',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Inter Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    /* Custom Scrollbar for Chat & Sidebar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.4); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.6); }
+
+    /* Doodle Background Overlay for Chat */
+    .chat-bg-pattern {
+      background-color: #efeae2;
+      background-image: radial-gradient(#00a884 0.5px, transparent 0.5px), radial-gradient(#00a884 0.5px, #efeae2 0.5px);
+      background-size: 20px 20px;
+      background-position: 0 0, 10px 10px;
+      opacity: 0.85;
+    }
+    .dark .chat-bg-pattern {
+      background-color: #0b141a;
+      background-image: radial-gradient(#202c33 0.75px, transparent 0.75px), radial-gradient(#202c33 0.75px, #0b141a 0.75px);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+      opacity: 0.95;
+    }
+  </style>
+
+  <!-- EmailJS SDK -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+</head>
+
+<body class="h-full bg-slate-200 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col justify-center items-center p-0 md:p-4 overflow-hidden transition-colors duration-200">
+
+  <!-- App Wrapper Container -->
+  <div id="app" class="w-full h-full max-w-[1600px] h-[100vh] md:h-[96vh] bg-white dark:bg-wa-darkBg rounded-none md:rounded-2xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-300 dark:border-slate-800">
+    
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+    <!-- Login / User Selection Overlay Modal -->
+    <div id="login-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-wa-darkPanel w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 bg-wa-green text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+            <i class="fa-brands fa-whatsapp text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-slate-800 dark:text-white">Welcome to WhatsApp</h2>
+          <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Select an existing account or register a new user to start chatting</p>
+        </div>
+
+        <!-- Account Selection Tabs -->
+        <div class="flex border-b border-slate-200 dark:border-slate-700 mb-4">
+          <button id="tab-select-user" onclick="switchLoginTab('select')" class="flex-1 pb-2 font-medium text-wa-green border-b-2 border-wa-green">Select User</button>
+          <button id="tab-create-user" onclick="switchLoginTab('create')" class="flex-1 pb-2 font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Create Account</button>
+        </div>
+
+        <!-- Form 1: Select User List -->
+        <div id="login-select-section">
+          <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Available Profiles</label>
+          <div id="user-login-list" class="space-y-2 max-h-56 overflow-y-auto pr-1 mb-4">
+            <div class="p-3 text-center text-slate-400 text-sm italic">Loading profiles from Firebase...</div>
+          </div>
+          <p class="text-xs text-slate-400 dark:text-slate-500 text-center">Admin users have access to manage users & send EmailJS alerts.</p>
+        </div>
+
+        <!-- Form 2: Quick Register User -->
+        <div id="login-create-section" class="hidden space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Full Name</label>
+            <input type="text" id="reg-name" placeholder="John Doe" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-wa-green">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Email Address</label>
+            <input type="email" id="reg-email" placeholder="john@example.com" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-wa-green">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Phone Number</label>
+            <input type="tel" id="reg-phone" placeholder="+1234567890" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-wa-green">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase mb-1">Role</label>
+            <select id="reg-role" class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-wa-green">
+              <option value="user">Standard User</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+          <button onclick="handleRegisterSubmit()" class="w-full py-2.5 bg-wa-green hover:bg-wa-teal text-white font-semibold rounded-lg shadow-md transition-colors duration-150 text-sm mt-2">
+            Create Profile & Log In
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Application Interface (Hidden until user logged in) -->
+    <div id="main-interface" class="flex-1 flex overflow-hidden">
+      
+      <!-- Left Sidebar: Chat Contacts & User List -->
+      <aside id="sidebar" class="w-full md:w-[380px] lg:w-[420px] flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-wa-darkBg z-10 transition-all duration-300">
+        
+        <!-- Sidebar Header -->
+        <div class="h-16 px-4 bg-wa-lightHeader dark:bg-wa-darkHeader flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="relative cursor-pointer" onclick="openProfileModal()">
+              <img id="current-user-avatar" src="https://placehold.co/100x100/00a884/ffffff?text=U" class="w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-slate-700" alt="Avatar">
+              <span id="current-user-status-dot" class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full"></span>
+            </div>
+            <div>
+              <h3 id="current-user-name" class="font-bold text-sm leading-tight">Loading...</h3>
+              <p id="current-user-role-badge" class="text-[10px] font-semibold text-wa-green uppercase">User</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <!-- Theme Toggle -->
+            <button onclick="toggleDarkMode()" title="Toggle Theme" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
+              <i class="fa-solid fa-moon dark:hidden text-lg"></i>
+              <i class="fa-solid fa-sun hidden dark:block text-lg text-amber-400"></i>
+            </button>
+
+            <!-- Admin Panel Toggle (Shown only to admins) -->
+            <button id="admin-panel-btn" onclick="openAdminModal()" title="Admin Control Panel" class="hidden p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-wa-green transition-colors relative">
+              <i class="fa-solid fa-user-gear text-lg"></i>
+            </button>
+
+            <!-- Switch User -->
+            <button onclick="logoutUser()" title="Switch Account" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors text-rose-500">
+              <i class="fa-solid fa-right-from-bracket text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="p-2 bg-white dark:bg-wa-darkBg border-b border-slate-100 dark:border-slate-800">
+          <div class="relative flex items-center">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400 text-sm"></i>
+            <input type="text" id="contact-search-input" onkeyup="filterContacts()" placeholder="Search contacts or start new chat" class="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-wa-darkPanel border-none rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-wa-green">
+          </div>
+        </div>
+
+        <!-- Contact List Filter Tabs -->
+        <div class="flex text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+          <button id="filter-all-btn" onclick="setContactFilter('all')" class="flex-1 py-2 text-center text-wa-green border-b-2 border-wa-green">All Chats</button>
+          <button id="filter-unread-btn" onclick="setContactFilter('unread')" class="flex-1 py-2 text-center hover:text-slate-700 dark:hover:text-slate-200">Unread</button>
+          <button id="filter-online-btn" onclick="setContactFilter('online')" class="flex-1 py-2 text-center hover:text-slate-700 dark:hover:text-slate-200">Online</button>
+        </div>
+
+        <!-- Contacts / Chat List Scrollable -->
+        <div id="contacts-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/50">
+          <!-- Dynamically populated contacts -->
+        </div>
+
+      </aside>
+
+      <!-- Right Main Panel: Chat Window -->
+      <main id="chat-panel" class="flex-1 flex flex-col bg-slate-100 dark:bg-slate-900 relative">
+        
+        <!-- Empty State (When no chat selected) -->
+        <div id="no-chat-selected" class="absolute inset-0 bg-slate-100 dark:bg-wa-darkBg flex flex-col items-center justify-center p-6 text-center z-10 border-b-8 border-wa-green">
+          <div class="w-32 h-32 mb-6 text-slate-300 dark:text-slate-700 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800/50">
+            <i class="fa-brands fa-whatsapp text-7xl text-wa-green opacity-80"></i>
+          </div>
+          <h2 class="text-2xl font-light text-slate-700 dark:text-slate-200 mb-2">WhatsApp Web for Teams</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md">Select a user from the contact list to start real-time messaging, or use the Admin panel to manage users and send email notifications.</p>
+          <div class="mt-8 flex items-center gap-2 text-xs text-slate-400">
+            <i class="fa-solid fa-lock"></i> End-to-end simulated messaging with EmailJS notifications
+          </div>
+        </div>
+
+        <!-- Active Chat Header -->
+        <div id="chat-header" class="h-16 px-4 bg-wa-lightHeader dark:bg-wa-darkHeader flex items-center justify-between border-b border-slate-200 dark:border-slate-800 z-10">
+          <div class="flex items-center gap-3">
+            <button onclick="backToSidebar()" class="md:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="relative cursor-pointer" onclick="toggleChatInfoPanel()">
+              <img id="active-chat-avatar" src="https://placehold.co/100x100/00a884/ffffff?text=U" class="w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-slate-700" alt="Active Chat Avatar">
+              <span id="active-chat-online-dot" class="hidden absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full"></span>
+            </div>
+            <div class="cursor-pointer" onclick="toggleChatInfoPanel()">
+              <h3 id="active-chat-name" class="font-bold text-sm leading-tight text-slate-800 dark:text-slate-100">Contact Name</h3>
+              <p id="active-chat-status" class="text-xs text-slate-500 dark:text-slate-400">Offline</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+            <button onclick="triggerEmailToUser()" title="Send Direct Email via EmailJS" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-wa-green transition-colors">
+              <i class="fa-solid fa-envelope text-lg"></i>
+            </button>
+            <button onclick="toggleChatInfoPanel()" title="Contact Details" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
+              <i class="fa-solid fa-ellipsis-vertical text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Messages Body Canvas -->
+        <div class="flex-1 relative overflow-hidden flex">
+          
+          <!-- Chat Message Feed -->
+          <div id="messages-container" class="flex-1 chat-bg-pattern p-4 overflow-y-auto space-y-3">
+            <!-- Messages rendered here -->
+          </div>
+
+          <!-- Chat Info Side Panel (Toggleable) -->
+          <div id="chat-info-panel" class="hidden w-72 bg-white dark:bg-wa-darkPanel border-l border-slate-200 dark:border-slate-800 p-4 flex-col items-center text-center z-10 transition-all">
+            <button onclick="toggleChatInfoPanel()" class="self-start text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 mb-2">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+            <img id="info-panel-avatar" src="https://placehold.co/150x150/00a884/ffffff?text=U" class="w-24 h-24 rounded-full object-cover mb-3 border-2 border-wa-green">
+            <h3 id="info-panel-name" class="font-bold text-lg text-slate-800 dark:text-white">User Name</h3>
+            <span id="info-panel-role" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-wa-green/20 text-wa-green uppercase mb-4">User</span>
+            
+            <div class="w-full text-left space-y-3 text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-slate-700 pt-4">
+              <div>
+                <span class="block text-slate-400 text-[10px] uppercase font-bold">Email Address</span>
+                <span id="info-panel-email" class="font-medium break-all">-</span>
+              </div>
+              <div>
+                <span class="block text-slate-400 text-[10px] uppercase font-bold">Phone Number</span>
+                <span id="info-panel-phone" class="font-medium">-</span>
+              </div>
+              <div>
+                <span class="block text-slate-400 text-[10px] uppercase font-bold">Status</span>
+                <span id="info-panel-status" class="font-medium">Offline</span>
+              </div>
+            </div>
+
+            <button onclick="triggerEmailToUser()" class="mt-6 w-full py-2 bg-wa-green hover:bg-wa-teal text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors">
+              <i class="fa-solid fa-paper-plane"></i> Send Notification Email
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Chat Input Bar -->
+        <div class="p-3 bg-wa-lightHeader dark:bg-wa-darkHeader border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 z-10">
+          <div class="relative">
+            <button onclick="toggleQuickEmojiPicker()" class="p-2 text-slate-500 hover:text-wa-green dark:text-slate-400 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+              <i class="fa-regular fa-face-smile text-xl"></i>
+            </button>
+            <!-- Quick Emoji Picker Popup -->
+            <div id="emoji-picker" class="hidden absolute bottom-12 left-0 bg-white dark:bg-wa-darkPanel border border-slate-200 dark:border-slate-700 rounded-xl p-2 shadow-xl grid grid-cols-5 gap-2 z-30">
+              <button onclick="insertEmoji('😊')" class="text-xl hover:scale-125 transition-transform">😊</button>
+              <button onclick="insertEmoji('😂')" class="text-xl hover:scale-125 transition-transform">😂</button>
+              <button onclick="insertEmoji('❤️')" class="text-xl hover:scale-125 transition-transform">❤️</button>
+              <button onclick="insertEmoji('👍')" class="text-xl hover:scale-125 transition-transform">👍</button>
+              <button onclick="insertEmoji('🔥')" class="text-xl hover:scale-125 transition-transform">🔥</button>
+              <button onclick="insertEmoji('🙏')" class="text-xl hover:scale-125 transition-transform">🙏</button>
+              <button onclick="insertEmoji('🎉')" class="text-xl hover:scale-125 transition-transform">🎉</button>
+              <button onclick="insertEmoji('👋')" class="text-xl hover:scale-125 transition-transform">👋</button>
+              <button onclick="insertEmoji('✨')" class="text-xl hover:scale-125 transition-transform">✨</button>
+              <button onclick="insertEmoji('✅')" class="text-xl hover:scale-125 transition-transform">✅</button>
+            </div>
+          </div>
+
+          <form id="message-form" onsubmit="handleSendMessage(event)" class="flex-1 flex items-center gap-2">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" class="flex-1 py-2 px-4 bg-white dark:bg-wa-darkPanel border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-wa-green">
+            <button type="submit" class="p-2.5 bg-wa-green hover:bg-wa-teal text-white rounded-lg transition-colors flex items-center justify-center shadow-md">
+              <i class="fa-solid fa-paper-plane text-sm"></i>
+            </button>
+          </form>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Admin Management Modal -->
+    <div id="admin-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-wa-darkPanel w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <!-- Admin Modal Header -->
+        <div class="px-6 py-4 bg-wa-green text-white flex items-center justify-between">
+          <div class="flex items-center gap-2 font-bold text-lg">
+            <i class="fa-solid fa-user-gear"></i> Admin Management & Email Dashboard
+          </div>
+          <button onclick="closeAdminModal()" class="text-white/80 hover:text-white text-xl">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Admin Content Body -->
+        <div class="p-6 overflow-y-auto space-y-6">
+          
+          <!-- Section 1: Add New User Form -->
+          <div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <h4 class="font-bold text-sm text-slate-800 dark:text-white mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-user-plus text-wa-green"></i> Add New User & Trigger Welcome Email
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input type="text" id="admin-add-name" placeholder="Full Name" class="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green">
+              <input type="email" id="admin-add-email" placeholder="Email Address" class="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green">
+              <input type="tel" id="admin-add-phone" placeholder="Phone Number" class="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green">
+              <select id="admin-add-role" class="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green">
+                <option value="user">User Role</option>
+                <option value="admin">Admin Role</option>
+              </select>
+            </div>
+            <div class="mt-3 flex items-center justify-between">
+              <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" id="admin-send-welcome-email" checked class="rounded accent-wa-green">
+                Send welcome notification via EmailJS
+              </label>
+              <button onclick="adminAddUser()" class="px-4 py-2 bg-wa-green hover:bg-wa-teal text-white font-semibold rounded-lg text-xs transition-colors shadow">
+                Create User
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: User List Table -->
+          <div>
+            <h4 class="font-bold text-sm text-slate-800 dark:text-white mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-users text-wa-green"></i> System Users Database
+            </h4>
+            <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+                    <th class="p-3">User</th>
+                    <th class="p-3">Role</th>
+                    <th class="p-3">Status</th>
+                    <th class="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-tbody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                  <!-- User rows injected here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Email Modal -->
+    <div id="email-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-wa-darkPanel w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-envelope text-wa-green"></i> Send EmailJS Notification
+          </h3>
+          <button onclick="closeEmailModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Recipient</label>
+            <input type="text" id="email-recipient-name" readonly class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">To Email</label>
+            <input type="text" id="email-recipient-addr" readonly class="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Email Subject / Title</label>
+            <input type="text" id="email-custom-subject" placeholder="Important Chat Notification" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Message Body</label>
+            <textarea id="email-custom-message" rows="4" placeholder="Type notification message here..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs focus:outline-none focus:border-wa-green"></textarea>
+          </div>
+          <button onclick="executeCustomEmailSend()" id="send-email-btn" class="w-full py-2.5 bg-wa-green hover:bg-wa-teal text-white font-semibold rounded-lg text-xs shadow-md transition-colors mt-2 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-paper-plane"></i> Dispatch Email
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Firebase SDKs (Modular Script via ES imports or Compat) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getDatabase, ref, set, push, onValue, update, remove, serverTimestamp, query, orderByChild, equalTo, get
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Firebase Configuration Credentials provided by User
+    const firebaseConfig = {
+      apiKey: "AIzaSyAtHlG5gjfVpIOeH6Fa0nsJZ8ny6N34MuA",
+      authDomain: "apexlearning-f3ba6.firebaseapp.com",
+      databaseURL: "https://apexlearning-f3ba6-default-rtdb.firebaseio.com",
+      projectId: "apexlearning-f3ba6",
+      storageBucket: "apexlearning-f3ba6.firebasestorage.app",
+      messagingSenderId: "211224830937",
+      appId: "1:211224830937:web:48eabc49ba6810dafeafc8",
+      measurementId: "G-692K9DV0XF"
+    };
+
+    // Initialize Firebase Realtime Database
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // EmailJS Credentials provided by User
+    const EMAILJS_PUBLIC_KEY = "g2lS2oiq_5piQ979o";
+    const EMAILJS_SERVICE_ID = "service_y0tmb2j";
+    const EMAILJS_TEMPLATE_ID = "template_awd5snr";
+
+    // Initialize EmailJS
+    emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+
+    // Application State Variables
+    let currentUser = null;
+    let activeChatUser = null;
+    let usersData = {};
+    let messagesListener = null;
+    let currentFilter = 'all';
+
+    // Make global functions accessible to window DOM elements
+    window.switchLoginTab = switchLoginTab;
+    window.handleRegisterSubmit = handleRegisterSubmit;
+    window.logoutUser = logoutUser;
+    window.selectChatContact = selectChatContact;
+    window.handleSendMessage = handleSendMessage;
+    window.toggleDarkMode = toggleDarkMode;
+    window.openAdminModal = openAdminModal;
+    window.closeAdminModal = closeAdminModal;
+    window.adminAddUser = adminAddUser;
+    window.adminDeleteUser = adminDeleteUser;
+    window.triggerEmailToUser = triggerEmailToUser;
+    window.closeEmailModal = closeEmailModal;
+    window.executeCustomEmailSend = executeCustomEmailSend;
+    window.toggleQuickEmojiPicker = toggleQuickEmojiPicker;
+    window.insertEmoji = insertEmoji;
+    window.toggleChatInfoPanel = toggleChatInfoPanel;
+    window.backToSidebar = backToSidebar;
+    window.filterContacts = filterContacts;
+    window.setContactFilter = setContactFilter;
+
+    // Default Seed Users (Auto-populate database if empty)
+    async function seedInitialUsersIfEmpty() {
+      const usersRef = ref(db, 'users');
+      const snapshot = await get(usersRef);
+      if (!snapshot.exists()) {
+        const seedUsers = {
+          'user_admin': {
+            name: 'Admin Boss',
+            email: 'admin@apexlearning.com',
+            phone: '+1 800-555-0199',
+            role: 'admin',
+            status: 'online',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+            lastSeen: Date.now()
+          },
+          'user_alice': {
+            name: 'Alice Smith',
+            email: 'alice@example.com',
+            phone: '+1 415-555-0142',
+            role: 'user',
+            status: 'online',
+            avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+            lastSeen: Date.now()
+          },
+          'user_bob': {
+            name: 'Bob Johnson',
+            email: 'bob@example.com',
+            phone: '+1 212-555-0188',
+            role: 'user',
+            status: 'offline',
+            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+            lastSeen: Date.now() - 3600000
+          }
+        };
+        await set(usersRef, seedUsers);
+      }
+    }
+
+    // Initialize Database Subscriptions
+    function initUsersListener() {
+      const usersRef = ref(db, 'users');
+      onValue(usersRef, (snapshot) => {
+        usersData = snapshot.val() || {};
+        renderLoginUserList();
+        renderContactsList();
+        renderAdminUserTable();
+        
+        // Refresh active chat info if selected user changed
+        if (activeChatUser && usersData[activeChatUser.id]) {
+          activeChatUser = { id: activeChatUser.id, ...usersData[activeChatUser.id] };
+          updateActiveChatHeaderUI();
+        }
+      });
+    }
+
+    // Login Modal Tab Switcher
+    function switchLoginTab(tab) {
+      const selectTabBtn = document.getElementById('tab-select-user');
+      const createTabBtn = document.getElementById('tab-create-user');
+      const selectSec = document.getElementById('login-select-section');
+      const createSec = document.getElementById('login-create-section');
+
+      if (tab === 'select') {
+        selectTabBtn.className = "flex-1 pb-2 font-medium text-wa-green border-b-2 border-wa-green";
+        createTabBtn.className = "flex-1 pb-2 font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200";
+        selectSec.classList.remove('hidden');
+        createSec.classList.add('hidden');
+      } else {
+        createTabBtn.className = "flex-1 pb-2 font-medium text-wa-green border-b-2 border-wa-green";
+        selectTabBtn.className = "flex-1 pb-2 font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200";
+        createSec.classList.remove('hidden');
+        selectSec.classList.add('hidden');
+      }
+    }
+
+    // Render Login User Selector
+    function renderLoginUserList() {
+      const listContainer = document.getElementById('user-login-list');
+      listContainer.innerHTML = '';
+
+      const userIds = Object.keys(usersData);
+      if (userIds.length === 0) {
+        listContainer.innerHTML = `<div class="p-3 text-center text-slate-400 text-sm">No profiles found. Create one!</div>`;
+        return;
+      }
+
+      userIds.forEach(uid => {
+        const u = usersData[uid];
+        const card = document.createElement('div');
+        card.className = "p-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700/80 rounded-xl cursor-pointer flex items-center justify-between transition-colors";
+        card.onclick = () => loginAsUser(uid);
+        card.innerHTML = `
+          <div class="flex items-center gap-3">
+            <img src="${u.avatar || 'https://placehold.co/100x100'}" class="w-10 h-10 rounded-full object-cover">
+            <div>
+              <div class="font-bold text-sm text-slate-800 dark:text-white">${u.name}</div>
+              <div class="text-xs text-slate-500">${u.email}</div>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 text-[10px] font-bold rounded-full ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-500' : 'bg-wa-green/20 text-wa-green'} uppercase">${u.role}</span>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    // User Registration Submission
+    async function handleRegisterSubmit() {
+      const name = document.getElementById('reg-name').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const phone = document.getElementById('reg-phone').value.trim();
+      const role = document.getElementById('reg-role').value;
+
+      if (!name || !email) {
+        showToast("Please fill in Name and Email", "error");
+        return;
+      }
+
+      const newUid = 'user_' + Date.now();
+      const newUser = {
+        name,
+        email,
+        phone: phone || '+1 000-000-0000',
+        role,
+        status: 'online',
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+        lastSeen: Date.now()
+      };
+
+      await set(ref(db, `users/${newUid}`), newUser);
+      showToast(`User ${name} created!`, "success");
+      
+      // Dispatch Welcome Email via EmailJS
+      sendEmailJSNotification(email, name, "Welcome to WhatsApp Web Application", `Hello ${name},\n\nYour user account has been successfully created. Role: ${role.toUpperCase()}. You can now log in and chat with team members in real time.`);
+
+      loginAsUser(newUid);
+    }
+
+    // Log In as Selected Profile
+    async function loginAsUser(uid) {
+      currentUser = { id: uid, ...usersData[uid] };
+
+      // Update Firebase Online Status
+      await update(ref(db, `users/${uid}`), {
+        status: 'online',
+        lastSeen: Date.now()
+      });
+
+      // Update Header UI
+      document.getElementById('current-user-name').textContent = currentUser.name;
+      document.getElementById('current-user-avatar').src = currentUser.avatar || 'https://placehold.co/100x100';
+      document.getElementById('current-user-role-badge').textContent = currentUser.role.toUpperCase();
+
+      // Show/Hide Admin Control Button based on role
+      const adminBtn = document.getElementById('admin-panel-btn');
+      if (currentUser.role === 'admin') {
+        adminBtn.classList.remove('hidden');
+      } else {
+        adminBtn.classList.add('hidden');
+      }
+
+      // Dismiss Login Modal
+      document.getElementById('login-modal').classList.add('hidden');
+      showToast(`Logged in as ${currentUser.name}`, "success");
+
+      // Handle disconnect status
+      window.addEventListener('beforeunload', () => {
+        if (currentUser) {
+          update(ref(db, `users/${currentUser.id}`), {
+            status: 'offline',
+            lastSeen: Date.now()
+          });
+        }
+      });
+    }
+
+    // Log Out
+    async function logoutUser() {
+      if (currentUser) {
+        await update(ref(db, `users/${currentUser.id}`), {
+          status: 'offline',
+          lastSeen: Date.now()
+        });
+      }
+      currentUser = null;
+      activeChatUser = null;
+      document.getElementById('no-chat-selected').classList.remove('hidden');
+      document.getElementById('login-modal').classList.remove('hidden');
+    }
+
+    function setContactFilter(filter) {
+      currentFilter = filter;
+      document.getElementById('filter-all-btn').className = filter === 'all' ? "flex-1 py-2 text-center text-wa-green border-b-2 border-wa-green font-bold" : "flex-1 py-2 text-center hover:text-slate-700 dark:hover:text-slate-200";
+      document.getElementById('filter-unread-btn').className = filter === 'unread' ? "flex-1 py-2 text-center text-wa-green border-b-2 border-wa-green font-bold" : "flex-1 py-2 text-center hover:text-slate-700 dark:hover:text-slate-200";
+      document.getElementById('filter-online-btn').className = filter === 'online' ? "flex-1 py-2 text-center text-wa-green border-b-2 border-wa-green font-bold" : "flex-1 py-2 text-center hover:text-slate-700 dark:hover:text-slate-200";
+      renderContactsList();
+    }
+
+    function filterContacts() {
+      renderContactsList();
+    }
+
+    // Render Left Contact List
+    function renderContactsList() {
+      const container = document.getElementById('contacts-list');
+      container.innerHTML = '';
+
+      if (!currentUser) return;
+
+      const searchQuery = document.getElementById('contact-search-input').value.toLowerCase();
+
+      Object.keys(usersData).forEach(uid => {
+        if (uid === currentUser.id) return; // Don't list self
+
+        const u = usersData[uid];
+        if (searchQuery && !u.name.toLowerCase().includes(searchQuery) && !u.email.toLowerCase().includes(searchQuery)) {
+          return;
+        }
+
+        if (currentFilter === 'online' && u.status !== 'online') return;
+
+        const isSelected = activeChatUser && activeChatUser.id === uid;
+
+        const contactDiv = document.createElement('div');
+        contactDiv.className = `p-3 flex items-center gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors ${isSelected ? 'bg-slate-200/70 dark:bg-slate-800' : ''}`;
+        contactDiv.onclick = () => selectChatContact(uid);
+
+        contactDiv.innerHTML = `
+          <div class="relative flex-shrink-0">
+            <img src="${u.avatar || 'https://placehold.co/100x100'}" class="w-12 h-12 rounded-full object-cover">
+            ${u.status === 'online' ? '<span class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full"></span>' : ''}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-baseline mb-0.5">
+              <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">${u.name}</h4>
+              <span class="text-[10px] text-slate-400">${u.status === 'online' ? 'Online' : formatTimestamp(u.lastSeen)}</span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${u.email}</p>
+          </div>
+        `;
+
+        container.appendChild(contactDiv);
+      });
+    }
+
+    // Select Active Chat User
+    function selectChatContact(uid) {
+      activeChatUser = { id: uid, ...usersData[uid] };
+      document.getElementById('no-chat-selected').classList.add('hidden');
+      
+      // Update Mobile Sidebar visibility
+      if (window.innerWidth < 768) {
+        document.getElementById('sidebar').classList.add('hidden');
+      }
+
+      updateActiveChatHeaderUI();
+      listenToChatMessages();
+      renderContactsList(); // Refresh highlighting
+    }
+
+    function backToSidebar() {
+      document.getElementById('sidebar').classList.remove('hidden');
+    }
+
+    function updateActiveChatHeaderUI() {
+      if (!activeChatUser) return;
+      document.getElementById('active-chat-name').textContent = activeChatUser.name;
+      document.getElementById('active-chat-avatar').src = activeChatUser.avatar || 'https://placehold.co/100x100';
+      
+      const statusText = document.getElementById('active-chat-status');
+      const dot = document.getElementById('active-chat-online-dot');
+      
+      if (activeChatUser.status === 'online') {
+        statusText.textContent = 'Online';
+        statusText.className = 'text-xs text-emerald-500 font-semibold';
+        dot.classList.remove('hidden');
+      } else {
+        statusText.textContent = `Last seen ${formatTimestamp(activeChatUser.lastSeen)}`;
+        statusText.className = 'text-xs text-slate-500 dark:text-slate-400';
+        dot.classList.add('hidden');
+      }
+
+      // Also sync Info Side Panel
+      document.getElementById('info-panel-avatar').src = activeChatUser.avatar || 'https://placehold.co/100x100';
+      document.getElementById('info-panel-name').textContent = activeChatUser.name;
+      document.getElementById('info-panel-role').textContent = activeChatUser.role.toUpperCase();
+      document.getElementById('info-panel-email').textContent = activeChatUser.email;
+      document.getElementById('info-panel-phone').textContent = activeChatUser.phone || 'N/A';
+      document.getElementById('info-panel-status').textContent = activeChatUser.status === 'online' ? 'Online Now' : 'Offline';
+    }
+
+    // Helper: Chat ID calculation for 1-on-1 chats (Sorted UIDs string)
+    function getChatId(uid1, uid2) {
+      return [uid1, uid2].sort().join('_');
+    }
+
+    function listenToChatMessages() {
+      if (!currentUser || !activeChatUser) return;
+
+      const chatId = getChatId(currentUser.id, activeChatUser.id);
+      const messagesRef = ref(db, `chats/${chatId}/messages`);
+
+      onValue(messagesRef, (snapshot) => {
+        const msgContainer = document.getElementById('messages-container');
+        msgContainer.innerHTML = '';
+
+        const data = snapshot.val() || {};
+        const msgList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+
+        if (msgList.length === 0) {
+          msgContainer.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full text-slate-400 text-xs">
+              <span class="px-3 py-1 bg-white/80 dark:bg-slate-800/80 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700">
+                🔒 Messages are end-to-end simulated. Say hi to ${activeChatUser.name}!
+              </span>
+            </div>
+          `;
+          return;
+        }
+
+        msgList.forEach(msg => {
+          const isOutgoing = msg.senderId === currentUser.id;
+          const bubble = document.createElement('div');
+          bubble.className = `flex ${isOutgoing ? 'justify-end' : 'justify-start'} mb-1`;
+
+          const innerBg = isOutgoing 
+            ? 'bg-wa-outgoingLight dark:bg-wa-outgoingDark text-slate-800 dark:text-slate-100 rounded-l-xl rounded-tr-xl' 
+            : 'bg-wa-incomingLight dark:bg-wa-incomingDark text-slate-800 dark:text-slate-100 rounded-r-xl rounded-tl-xl';
+
+          bubble.innerHTML = `
+            <div class="max-w-[75%] px-3 py-1.5 shadow-sm text-sm ${innerBg} relative group">
+              <div class="break-words">${escapeHTML(msg.text)}</div>
+              <div class="flex items-center justify-end gap-1 text-[10px] text-slate-400 dark:text-slate-400 mt-0.5">
+                <span>${formatTimeOnly(msg.timestamp)}</span>
+                ${isOutgoing ? '<i class="fa-solid fa-check-double text-sky-500 text-[10px]"></i>' : ''}
+              </div>
+            </div>
+          `;
+          msgContainer.appendChild(bubble);
+        });
+
+        // Auto Scroll to Bottom
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      });
+    }
+
+    // Send New Chat Message
+    async function handleSendMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+
+      if (!text || !currentUser || !activeChatUser) return;
+
+      const chatId = getChatId(currentUser.id, activeChatUser.id);
+      const messagesRef = ref(db, `chats/${chatId}/messages`);
+      const newMsgRef = push(messagesRef);
+
+      const messageObj = {
+        senderId: currentUser.id,
+        receiverId: activeChatUser.id,
+        text: text,
+        timestamp: Date.now(),
+        readStatus: false
+      };
+
+      await set(newMsgRef, messageObj);
+      input.value = '';
+
+      // If receiver is offline, send EmailJS Notification
+      if (activeChatUser.status === 'offline') {
+        sendEmailJSNotification(
+          activeChatUser.email,
+          activeChatUser.name,
+          `New Message from ${currentUser.name} on WhatsApp Web`,
+          `Hi ${activeChatUser.name},\n\nYou received a new message from ${currentUser.name}:\n\n"${text}"\n\nLog in to respond!`
+        );
+      }
+    }
+
+    function sendEmailJSNotification(toEmail, toName, subject, messageText) {
+      const emailParameters = {
+        to_email: toEmail,
+        to_name: toName,
+        from_name: currentUser ? currentUser.name : "WhatsApp Admin",
+        subject: subject,
+        message: messageText
+      };
+
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, emailParameters)
+        .then(() => {
+          showToast(`Email alert sent to ${toEmail}`, "info");
+        })
+        .catch((error) => {
+          console.warn("EmailJS Delivery Notice:", error);
+          showToast(`EmailJS alert attempted for ${toEmail}`, "info");
+        });
+    }
+
+    // Manual Custom Email Trigger Modal
+    function triggerEmailToUser() {
+      if (!activeChatUser) {
+        showToast("Please select a user first", "error");
+        return;
+      }
+      document.getElementById('email-recipient-name').value = activeChatUser.name;
+      document.getElementById('email-recipient-addr').value = activeChatUser.email;
+      document.getElementById('email-custom-subject').value = `Important Update from ${currentUser ? currentUser.name : 'Admin'}`;
+      document.getElementById('email-custom-message').value = `Hello ${activeChatUser.name},\n\n`;
+      document.getElementById('email-modal').classList.remove('hidden');
+    }
+
+    function closeEmailModal() {
+      document.getElementById('email-modal').classList.add('hidden');
+    }
+
+    function executeCustomEmailSend() {
+      const recipientEmail = document.getElementById('email-recipient-addr').value;
+      const recipientName = document.getElementById('email-recipient-name').value;
+      const subject = document.getElementById('email-custom-subject').value;
+      const body = document.getElementById('email-custom-message').value;
+
+      if (!subject || !body) {
+        showToast("Subject and message are required", "error");
+        return;
+      }
+
+      sendEmailJSNotification(recipientEmail, recipientName, subject, body);
+      closeEmailModal();
+    }
+
+    function openAdminModal() {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast("Access Denied. Admins only.", "error");
+        return;
+      }
+      renderAdminUserTable();
+      document.getElementById('admin-modal').classList.remove('hidden');
+    }
+
+    function closeAdminModal() {
+      document.getElementById('admin-modal').classList.add('hidden');
+    }
+
+    function renderAdminUserTable() {
+      const tbody = document.getElementById('admin-users-tbody');
+      tbody.innerHTML = '';
+
+      Object.keys(usersData).forEach(uid => {
+        const u = usersData[uid];
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 dark:hover:bg-slate-800/40";
+        tr.innerHTML = `
+          <td class="p-3">
+            <div class="flex items-center gap-2">
+              <img src="${u.avatar || 'https://placehold.co/100x100'}" class="w-7 h-7 rounded-full object-cover">
+              <div>
+                <div class="font-bold text-slate-800 dark:text-slate-100">${u.name}</div>
+                <div class="text-[10px] text-slate-400">${u.email}</div>
+              </div>
+            </div>
+          </td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-500' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'} uppercase">${u.role}</span>
+          </td>
+          <td class="p-3">
+            <span class="inline-flex items-center gap-1.5 text-[10px] font-medium ${u.status === 'online' ? 'text-emerald-500' : 'text-slate-400'}">
+              <span class="w-2 h-2 rounded-full ${u.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+              ${u.status}
+            </span>
+          </td>
+          <td class="p-3 text-right">
+            <button onclick="adminDeleteUser('${uid}')" class="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded transition-colors" title="Delete User">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function adminAddUser() {
+      const name = document.getElementById('admin-add-name').value.trim();
+      const email = document.getElementById('admin-add-email').value.trim();
+      const phone = document.getElementById('admin-add-phone').value.trim();
+      const role = document.getElementById('admin-add-role').value;
+      const sendEmail = document.getElementById('admin-send-welcome-email').checked;
+
+      if (!name || !email) {
+        showToast("Fill in Name and Email", "error");
+        return;
+      }
+
+      const uid = 'user_' + Date.now();
+      const newUser = {
+        name,
+        email,
+        phone: phone || '+1 000-000-0000',
+        role,
+        status: 'offline',
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+        lastSeen: Date.now()
+      };
+
+      await set(ref(db, `users/${uid}`), newUser);
+      showToast(`User ${name} created successfully`, "success");
+
+      if (sendEmail) {
+        sendEmailJSNotification(
+          email,
+          name,
+          "Account Created - WhatsApp Web",
+          `Hello ${name},\n\nYour account has been created by Administrator (${currentUser.name}). You are registered as ${role.toUpperCase()}.`
+        );
+      }
+
+      // Reset form
+      document.getElementById('admin-add-name').value = '';
+      document.getElementById('admin-add-email').value = '';
+      document.getElementById('admin-add-phone').value = '';
+    }
+
+    async function adminDeleteUser(uid) {
+      if (confirm(`Are you sure you want to delete user ${usersData[uid]?.name}?`)) {
+        await remove(ref(db, `users/${uid}`));
+        showToast("User removed", "info");
+      }
+    }
+
+    // UI Utilities
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    function toggleQuickEmojiPicker() {
+      document.getElementById('emoji-picker').classList.toggle('hidden');
+    }
+
+    function insertEmoji(emoji) {
+      const input = document.getElementById('message-input');
+      input.value += emoji;
+      document.getElementById('emoji-picker').classList.add('hidden');
+      input.focus();
+    }
+
+    function toggleChatInfoPanel() {
+      const panel = document.getElementById('chat-info-panel');
+      panel.classList.toggle('hidden');
+      panel.classList.toggle('flex');
+    }
+
+    function formatTimestamp(ts) {
+      if (!ts) return '';
+      const date = new Date(ts);
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatTimeOnly(ts) {
+      if (!ts) return '';
+      const date = new Date(ts);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    function showToast(msg, type = "info") {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const bgClass = type === 'error' ? 'bg-rose-600' : type === 'success' ? 'bg-wa-green' : 'bg-slate-800';
+      toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-xl text-xs font-semibold flex items-center justify-between gap-3 pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0`;
+      
+      toast.innerHTML = `
+        <span>${msg}</span>
+        <button onclick="this.parentElement.remove()" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      `;
+      
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // App Startup
+    window.onload = async () => {
+      await seedInitialUsersIfEmpty();
+      initUsersListener();
+    };
+  </script>
+
+</body>
+</html>
